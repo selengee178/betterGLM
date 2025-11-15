@@ -125,3 +125,40 @@ irls_logistic_gif <- function(X, y,
                  png_args, gif_arg)
   } else {
     has_convert <- (system("convert -version",
+                           ignore.stdout = TRUE,
+                           ignore.stderr = TRUE) == 0)
+  }
+
+  if (has_magick) {
+    cmd <- paste("magick convert -delay", delay, "-loop 0",
+                 png_args, gif_arg)
+  } else if (has_convert) {
+    cmd <- paste("convert -delay", delay, "-loop 0",
+                 png_args, gif_arg)
+  } else {
+    cmd <- NULL
+  }
+
+  if (is.null(cmd)) {
+    warning("Neither 'magick' nor 'convert' found. GIF not created.")
+  } else {
+    system(cmd)
+  }
+
+  if (cleanup) {
+    unlink(frame_files)
+  }
+
+  list(
+    beta      = beta,
+    paras     = paras,
+    iter      = k,
+    converged = converged,
+    gif_file  = gif_file
+  )
+}
+
+
+
+
+
