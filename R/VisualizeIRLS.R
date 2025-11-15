@@ -1,8 +1,32 @@
-### ---------------------------
-### 1. IRLS logistic regression
-### ---------------------------
+#' IRLS for logistic regression with GIF output
+#'
+#' @param X Design matrix (including intercept column if desired).
+#' @param y Response vector (0/1).
+#' @param gif_file Output GIF file name.
+#' @param max_iter Maximum number of IRLS iterations.
+#' @param tol Convergence tolerance on max |beta_new - beta|.
+#' @param interval Time interval between frames in seconds.
+#' @param width GIF width in pixels.
+#' @param height GIF height in pixels.
+#'
+#' @return A list with components:
+#'   \item{beta}{Final coefficient estimates.}
+#'   \item{paras}{Matrix of coefficients per iteration.}
+#'   \item{iter}{Number of iterations run.}
+#'   \item{converged}{Logical, whether convergence criterion met.}
+#' @export
+irls_logistic_gif <- function(X, y,
+                              gif_file  = "irls.gif",
+                              max_iter  = 25,
+                              tol       = 1e-6,
+                              interval  = 0.2,
+                              width     = 700,
+                              height    = 450) {
+  # ensure matrix
+  X <- as.matrix(X)
+  y <- as.numeric(y)
 
-irls_logistic <- function(X, y, max_iter = 25, tol = 1e-6) {
+  # ---- IRLS core ----
   p <- ncol(X)
   beta <- rep(0, p)
 
@@ -27,76 +51,61 @@ irls_logistic <- function(X, y, max_iter = 25, tol = 1e-6) {
     paras[k + 1, ] <- beta_new
 
     if (max(abs(beta_new - beta)) < tol) {
-      paras <- paras[1:(k + 1), , drop = FALSE]
       converged <- TRUE
+      paras <- paras[1:(k + 1), , drop = FALSE]
       break
     }
+
     beta <- beta_new
   }
 
-  list(beta = beta_new, paras = paras, iter = k, converged = converged)
-}
+  if (!converged) {
+    # if never broke, truncate to full matrix
+    paras <- paras[1:(max_iter + 1), , drop = FALSE]
+    k <- max_iter
+  }
 
+  iters  <- 0:(nrow(paras) - 1)
+  xrange <- range(iters)
+  yrange <- range(paras)
 
-### ---------------------------
-### 2. Run IRLS
-### ---------------------------
-
-# (Assume X and y already defined earlier)
-result <- irls_logistic(X, y)
-paras  <- result$paras
-
-iters  <- 0:(nrow(paras) - 1)
-xrange <- range(iters)
-yrange <- range(paras)
-
-
-### ---------------------------
-### 3. Generate PNG frames
-### ---------------------------
-
-for (k in 1:nrow(paras)) {
-  png(sprintf("irls_%02d.png", k), width = 700, height = 450)
-
-  matplot(
-    x = iters[1:k],
-    y = paras[1:k, , drop = FALSE],
-    type = "l",
-    lty  = 1,
-    lwd  = 2,
-    xlim = xrange,
-    ylim = yrange,
-    xlab = "Iteration",
-    ylab = "Parameter value",
-    main = paste("IRLS Parameter Updates: iteration", iters[k])
+  # ---- GIF generation using animation::saveGIF ----
+  animation::saveGIF(
+    expr = {
+      for (i in 1:nrow(paras)) {
+        graphics::matplot(
+          x = iters[1:i],
+          y = paras[1:i, , drop = FALSE],
+          type = "l",
+          lty  = 1,
+          lwd  = 2,
+          xlim = xrange,
+          ylim = yrange,
+          xlab = "Iteration",
+          ylab = "Parameter value",
+          main = paste("IRLS Parameter Updates – up to iteration", iters[i])
+        )
+        graphics::legend(
+          "topright",
+          legend = colnames(paras),
+          col    = seq_len(ncol(paras)),
+          lty    = 1,
+          lwd    = 2
+        )
+      }
+    },
+    movie.name = gif_file,
+    interval   = interval,
+    ani.width  = width,
+    ani.height = height
   )
 
-  legend("topright",
-         legend = colnames(paras),
-         col    = 1:ncol(paras),
-         lty    = 1,
-         lwd    = 2)
-
-  dev.off()
+  # return results
+  list(
+    beta      = beta,
+    paras     = paras,
+    iter      = k,
+    converged = converged,
+    gif_file  = gif_file
+  )
 }
-
-
-### ---------------------------
-### 4. Generate GIF
-### ---------------------------
-
-# detect magick command
-if (system("magick -version", ignore.stdout=TRUE, ignore.stderr=TRUE) == 0) {
-  # new Windows ImageMagick syntax
-  system("magick convert -delay 20 -loop 0 irls_*.png irls.gif")
-} else {
-  # Linux/macOS / old ImageMagick
-  system("convert -delay 20 -loop 0 irls_*.png irls.gif")
-}
-
-
-### ---------------------------
-### 5. (Optional) remove PNG frames
-### ---------------------------
-
-# unlink("irls_*.png")
